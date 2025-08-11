@@ -20,13 +20,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest ruff
       - name: Smoke test import
         run: |
           python - <<'PY'
           import app
           print('App imported, routes:', [r.rule for r in app.app.url_map.iter_rules()][:5])
           PY
+      - name: Lint (ruff)
+        run: |
+          ruff check .
       - name: Run tests
         run: |
-          pytest -q || true  # placeholder: laat niet falen totdat tests bestaan
+          pytest -q

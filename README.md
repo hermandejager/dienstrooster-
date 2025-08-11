@@ -135,7 +135,7 @@ Let op: Activeer de venv opnieuw in elke nieuwe terminal sessie met:
 
 ## Roadmap (kort)
 - [x] CI workflow (pytest smoke)
-- [ ] Linting (ruff/flake8) + opnemen in CI
+- [x] Linting (ruff) + in CI
 - [x] Dockerfile + container distributie basis
 - [x] Config via `.env` (python-dotenv)
 - [ ] Scheduler constraints (min rust, max diensten/week)
@@ -151,6 +151,20 @@ Tag een release:
 ```powershell
 git tag -a v0.1.0 -m "Initial public version"
 git push origin v0.1.0
+```
+
+Volgende patch release voorbeeld:
+```powershell
+git tag -a v0.1.1 -m "Docker + env + tests"
+git push origin v0.1.1
+```
+
+## Docker
+Build & run lokaal:
+```powershell
+docker build -t dienstrooster:latest .
+copy .env.example .env  # pas waarden aan
+docker run --rm -p 5000:5000 --env-file .env dienstrooster:latest
 ```
 
 ## Bijdragen
