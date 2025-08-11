@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 # Expose default Flask port
 EXPOSE 5000
-# Use environment SECRET_KEY and ADMIN_PASSWORD from runtime (e.g. docker run -e ...)
-ENV FLASK_ENV=production
-CMD ["python", "app.py"]
+# Use environment SECRET_KEY and ADMIN_PASSWORD from runtime
+ENV FLASK_ENV=production \
+    GUNICORN_WORKERS=3 \
+    GUNICORN_TIMEOUT=60
+# Production server via gunicorn
+CMD ["gunicorn", "-w", "${GUNICORN_WORKERS}", "-b", "0.0.0.0:5000", "app:app", "--timeout", "${GUNICORN_TIMEOUT}"]
