@@ -111,9 +111,9 @@ Let op: Activeer de venv opnieuw in elke nieuwe terminal sessie met:
 ## Config & Gegevens
 | Item | Locatie | Opmerking |
 |------|---------|-----------|
-| Secret key | `app.py` (hardcoded) | Aanpassen/uit `.env` laden voor productie |
+| Secret key | `.env` (`SECRET_KEY`) | Genereer lange random waarde |
 | Medewerkersdata | `medewerkers.json` | Wordt gemigreerd naar objectstructuur bij laden |
-| Login | Hardcoded ROLES dict | Hashing voor demo; in productie database/IdP |
+| Login | ROLES dict (admin pw uit `.env`) | Gebruik echte user storage in prod |
 
 ## Fairness Heuristiek (vereenvoudigd)
 1. Filter kandidaten op beschikbaarheid + limieten.
@@ -134,10 +134,10 @@ Let op: Activeer de venv opnieuw in elke nieuwe terminal sessie met:
 - Overweeg wachtwoord reset / user beheer interface.
 
 ## Roadmap (kort)
-- [ ] CI workflow (pytest smoke + flake8 / ruff)
-- [ ] Branch protection (status checks required)
-- [ ] Dockerfile + container distributie
-- [ ] Config via `.env` (python-dotenv)
+- [x] CI workflow (pytest smoke)
+- [ ] Linting (ruff/flake8) + opnemen in CI
+- [x] Dockerfile + container distributie basis
+- [x] Config via `.env` (python-dotenv)
 - [ ] Scheduler constraints (min rust, max diensten/week)
 - [ ] Kalender UI beschikbaarheid
 - [ ] Unit tests fairness + edge cases

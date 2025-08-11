@@ -6,16 +6,22 @@ import random
 from datetime import datetime, timedelta
 import json
 import os
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 
 app = Flask(__name__)
-app.secret_key = 'dienstrooster_secret_key'
+app.secret_key = os.getenv('SECRET_KEY', 'dev-insecure-change-me')
 
 MEDEWERKERS_FILE = os.path.join(os.path.dirname(__file__), 'medewerkers.json')
 DIENSTEN = ['Dagdienst', 'Avonddienst', 'Nachtdienst']
 # In een echte app zou dit in een database staan.
 # Voor demo: gebruikersnaam -> password hash
-ROLES = {'admin': generate_password_hash('admin123')}
+ROLES = {'admin': generate_password_hash(os.getenv('ADMIN_PASSWORD', 'admin123'))}
 
 def laad_medewerkers():
     if not os.path.exists(MEDEWERKERS_FILE):
