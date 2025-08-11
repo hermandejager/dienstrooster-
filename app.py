@@ -158,6 +158,10 @@ def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not session.get('user'):
+            # JSON / XHR verzoek -> 401 i.p.v. redirect
+            wants_json = request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html
+            if wants_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'auth_required'}), 401
             flash('Login vereist', 'warning')
             return redirect(url_for('login', next=request.path))
         return fn(*args, **kwargs)
@@ -181,11 +185,13 @@ def index():
 
 # Rooster bekijken
 @app.route('/rooster')
+@login_required
 def rooster():
     rooster = session.get('rooster', None)
     return render_template('rooster.html', rooster=rooster, diensten=DIENSTEN, user=session.get('user'))
 
 @app.route('/api/rooster')
+@login_required
 def rooster_api():
     return jsonify(session.get('rooster', []))
 
