@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, Response, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file, Response, flash, abort
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import random
+import time
+import logging
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 import json
 import os
@@ -22,6 +25,40 @@ DIENSTEN = ['Dagdienst', 'Avonddienst', 'Nachtdienst']
 # In een echte app zou dit in een database staan.
 # Voor demo: gebruikersnaam -> password hash
 ROLES = {'admin': generate_password_hash(os.getenv('ADMIN_PASSWORD', 'admin123'))}
+
+# -------- Audit & Rate Limiting --------
+AUDIT_LOG_FILE = os.path.join(os.path.dirname(__file__), 'audit.log')
+logger = logging.getLogger('audit')
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    fh = logging.FileHandler(AUDIT_LOG_FILE, encoding='utf-8')
+    fh.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+    logger.addHandler(fh)
+
+def audit(action, **fields):
+    try:
+        logger.info('%s %s', action, json.dumps(fields, ensure_ascii=False))
+    except Exception:
+        logger.info('%s {"_audit_error":true}', action)
+
+_rate_buckets = defaultdict(lambda: deque())
+def rate_limit(max_calls:int, per_seconds:int):
+    def deco(fn):
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            key = (request.remote_addr or 'anon', fn.__name__)
+            now = time.time()
+            bucket = _rate_buckets[key]
+            while bucket and now - bucket[0] > per_seconds:
+                bucket.popleft()
+            if len(bucket) >= max_calls:
+                if request.accept_mimetypes.accept_json:
+                    return jsonify({'error':'rate_limited'}), 429
+                abort(429)
+            bucket.append(now)
+            return fn(*args, **kwargs)
+        return inner
+    return deco
 
 def laad_medewerkers():
     if not os.path.exists(MEDEWERKERS_FILE):
@@ -158,10 +195,9 @@ def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not session.get('user'):
-            # JSON / XHR verzoek -> 401 i.p.v. redirect
-            wants_json = request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html
-            if wants_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({'error': 'auth_required'}), 401
+            wants_json = request.path.startswith(('/api/', '/export/')) or request.accept_mimetypes.accept_json
+            if wants_json:
+                abort(401)
             flash('Login vereist', 'warning')
             return redirect(url_for('login', next=request.path))
         return fn(*args, **kwargs)
@@ -197,8 +233,10 @@ def rooster_api():
 
 @app.route('/export/rooster.json')
 @login_required
+@rate_limit(30,60)
 def export_rooster_json():
     data = session.get('rooster', [])
+    audit('export_json', count=len(data), user=session.get('user'))
     return jsonify(data)
 
 @app.post('/api/rooster/move')
@@ -242,6 +280,7 @@ def move_dienst():
         dag_s[s_dienst] = '-'
         actie = 'move'
     session['rooster'] = rooster
+    audit('shift_'+actie, source=source, target=target, user=session.get('user'))
     return jsonify({'status': 'ok', 'actie': actie, 'rooster': rooster})
 
 # Medewerkersbeheer
@@ -299,10 +338,10 @@ def edit_medewerker(naam):
                 return redirect(url_for('medewerkers'))
             return render_template('medewerker_edit.html', medewerker=m, diensten=DIENSTEN)
     return redirect(url_for('medewerkers'))
-
 # CSV export
 @app.route('/export/rooster.csv')
 @login_required
+@rate_limit(20,60)
 def export_csv():
     rooster = session.get('rooster', [])
     if not rooster:
@@ -312,11 +351,13 @@ def export_csv():
     for r in rooster:
         lines.append(','.join([r['datum']] + [r.get(d,'') for d in DIENSTEN]))
     csv_data = '\n'.join(lines)
+    audit('export_csv', count=len(rooster), user=session.get('user'))
     return Response(csv_data, mimetype='text/csv', headers={'Content-Disposition':'attachment; filename=rooster.csv'})
 
 # PDF export
 @app.route('/export/rooster.pdf')
 @login_required
+@rate_limit(10,60)
 def export_pdf():
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
@@ -349,6 +390,7 @@ def export_pdf():
     c.showPage()
     c.save()
     buffer.seek(0)
+    audit('export_pdf', count=len(rooster), user=session.get('user'))
     return send_file(buffer, as_attachment=True, download_name='rooster.pdf', mimetype='application/pdf')
 
 # Auth
@@ -360,20 +402,35 @@ def login():
         if stored and check_password_hash(stored, pw):
             session['user'] = user
             flash('Ingelogd als %s' % user, 'success')
+            audit('login_success', user=user, ip=request.remote_addr)
             return redirect(url_for('index'))
+        audit('login_failed', user=user, ip=request.remote_addr)
         flash('Ongeldige login', 'error')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.pop('user', None)
+    user = session.pop('user', None)
     flash('Uitgelogd', 'info')
+    audit('logout', user=user, ip=request.remote_addr)
     return redirect(url_for('index'))
 
 @app.route('/toggle_dark')
 def toggle_dark():
     session['dark'] = not session.get('dark')
     return ('', 204)
+
+@app.errorhandler(401)
+def err_401(e):
+    return render_template('errors/401.html'), 401
+
+@app.errorhandler(403)
+def err_403(e):
+    return render_template('errors/403.html'), 403
+
+@app.errorhandler(429)
+def err_429(e):
+    return Response('Te veel verzoeken - probeer later opnieuw.', status=429, mimetype='text/plain')
 
 if __name__ == '__main__':
     app.run(debug=True)
