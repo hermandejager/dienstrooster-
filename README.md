@@ -58,12 +58,24 @@ http://127.0.0.1:5000
 ```
 app.py                # Flask app + scheduling + routes
 templates/            # Jinja templates (Material Design)
-	base.html
-	index.html
-	rooster.html        # Matrix weergave
-	medewerkers*.html
+  base.html
+  index.html
+  rooster.html        # Matrix weergave
+  medewerkers*.html
 requirements.txt      # Dependencies (Flask, reportlab)
 medewerkers.json      # (Genegeerd in git) lokale data
+ruff.toml             # Lint / style configuratie
+Dockerfile            # Container build
+docker-compose.yml    # Gemak: run + volume mount data
+scripts/
+  gen_secret.py       # Genereer SECRET_KEY en optioneel admin wachtwoord hash
+docs/
+  overview.md         # Architectuur / uitleg
+.github/workflows/ci.yml  # CI pipeline
+.tests/
+  test_smoke.py
+  test_fairness.py
+.env.example          # Voorbeeld env variabelen
 .gitignore            # Sluit gevoelige / lokale bestanden uit
 ```
 
@@ -134,14 +146,15 @@ Let op: Activeer de venv opnieuw in elke nieuwe terminal sessie met:
 - Overweeg wachtwoord reset / user beheer interface.
 
 ## Roadmap (kort)
-- [x] CI workflow (pytest smoke)
+- [x] CI workflow (pytest smoke + fairness tests)
 - [x] Linting (ruff) + in CI
-- [x] Dockerfile + container distributie basis
+- [x] Dockerfile + docker-compose
 - [x] Config via `.env` (python-dotenv)
-- [ ] Scheduler constraints (min rust, max diensten/week)
+- [x] Fairness constraints (nacht + dag-na-nacht + max 2 nachten + weeklimiet)
+- [ ] Extra rustregels (min uren tussen late -> vroege dienst)
 - [ ] Kalender UI beschikbaarheid
-- [ ] Unit tests fairness + edge cases
 - [ ] Role-based authorisatie (admin / viewer)
+- [ ] Persistente database (PostgreSQL/SQLite) optie
 
 ## Licentie
 Kies een licentie (MIT aanbevolen). Voeg een `LICENSE` bestand toe.
@@ -172,4 +185,25 @@ Maak een branch, open een Pull Request. Houd commits klein en beschrijvend.
 
 ## Problemen / Feedback
 Open een Issue met reproduceerbare stappen of gewenste feature.
+
+## Branch Protection Aanpak
+1. Ga naar GitHub repo Settings -> Branches.
+2. Add rule: branch name pattern `main`.
+3. Vink aan: Require pull request reviews (min 1), Require status checks.
+4. Selecteer checks: `ruff` (lint), `pytest` (tests / fairness), eventueel `build`.
+5. Optioneel: Require signed commits, linear history.
+6. Save.
+
+## Tests Uitvoeren
+```powershell
+# In venv
+pytest -q
+```
+Rapporteert fairness regels en basis smoke.
+
+## Geheimen Genereren
+```powershell
+python scripts/gen_secret.py --admin-password NieuweSterkePW123!
+```
+Output kopiëren naar `.env` (vervang bestaande waarden).
 

@@ -1,0 +1,12 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    container_name: dienstrooster_app
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - ./medewerkers.json:/app/medewerkers.json
+    restart: unless-stopped
