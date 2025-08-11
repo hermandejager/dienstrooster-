@@ -195,6 +195,49 @@ def export_rooster_json():
     data = session.get('rooster', [])
     return jsonify(data)
 
+@app.post('/api/rooster/move')
+@login_required
+def move_dienst():
+    """Verplaats of swap een dienst via drag & drop.
+    Verwacht JSON: {"source": {"datum":..., "dienst":...}, "target": {"datum":..., "dienst":...}}
+    Logica:
+      - Als target dezelfde als source -> no-op
+      - Als target leeg ('-') -> move
+      - Anders: swap
+    """
+    data = request.get_json(silent=True) or {}
+    rooster = session.get('rooster') or []
+    source = data.get('source') or {}
+    target = data.get('target') or {}
+    s_datum, s_dienst = source.get('datum'), source.get('dienst')
+    t_datum, t_dienst = target.get('datum'), target.get('dienst')
+    if not (s_datum and s_dienst and t_datum and t_dienst):
+        return jsonify({'status': 'error', 'message': 'Ongeldige parameters'}), 400
+    if s_datum == t_datum and s_dienst == t_dienst:
+        return jsonify({'status': 'ok', 'rooster': rooster})
+    # Zoek dagen
+    dag_map = {d['datum']: d for d in rooster}
+    if s_datum not in dag_map or t_datum not in dag_map:
+        return jsonify({'status': 'error', 'message': 'Datum niet gevonden'}), 404
+    dag_s = dag_map[s_datum]
+    dag_t = dag_map[t_datum]
+    if s_dienst not in dag_s or t_dienst not in dag_t:
+        return jsonify({'status': 'error', 'message': 'Dienst niet gevonden'}), 404
+    bron_medewerker = dag_s.get(s_dienst, '-')
+    if not bron_medewerker or bron_medewerker == '-':
+        return jsonify({'status': 'error', 'message': 'Bron is leeg'}), 400
+    doel_medewerker = dag_t.get(t_dienst, '-')
+    # Swap of move
+    if doel_medewerker and doel_medewerker != '-':
+        dag_s[s_dienst], dag_t[t_dienst] = doel_medewerker, bron_medewerker
+        actie = 'swap'
+    else:
+        dag_t[t_dienst] = bron_medewerker
+        dag_s[s_dienst] = '-'
+        actie = 'move'
+    session['rooster'] = rooster
+    return jsonify({'status': 'ok', 'actie': actie, 'rooster': rooster})
+
 # Medewerkersbeheer
 @app.route('/medewerkers', methods=['GET', 'POST'])
 @login_required

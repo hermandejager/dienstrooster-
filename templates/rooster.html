@@ -88,7 +88,7 @@
                                         {% set assigned = (dag[dienst] == medewerker) %}
                                         <td class="slot {% if assigned %}assigned{% endif %}" data-datum="{{ dag['datum'] }}" data-dienst="{{ dienst }}" data-medewerker="{{ medewerker }}">
                                             {% if assigned %}
-                                                <div class="chip {% if dienst=='Dagdienst' %}dag{% elif dienst=='Avonddienst' %}avond{% else %}nacht{% endif %}">{{ dienst[0:1] }}</div>
+                                                <div class="chip drag-chip {% if dienst=='Dagdienst' %}dag{% elif dienst=='Avonddienst' %}avond{% else %}nacht{% endif %}" draggable="true" data-naam="{{ medewerker }}" title="Sleep om te verplaatsen / wisselen">{{ dienst[0:1] }}</div>
                                             {% else %}&nbsp;{% endif %}
                                         </td>
                                     {% endfor %}
@@ -111,6 +111,81 @@
 {% block extra_js %}
 <script>
     const diensten = JSON.parse('{{ diensten|tojson|safe }}');
+    let dragState = null;
+    function initDrag(){
+        document.querySelectorAll('.drag-chip').forEach(chip => {
+            chip.addEventListener('dragstart', ev => {
+                const td = chip.closest('td');
+                dragState = {
+                    datum: td.dataset.datum,
+                    dienst: td.dataset.dienst,
+                    medewerker: td.dataset.medewerker
+                };
+                ev.dataTransfer.effectAllowed = 'move';
+                chip.classList.add('dragging');
+            });
+            chip.addEventListener('dragend', () => {
+                chip.classList.remove('dragging');
+                dragState = null;
+            });
+        });
+        document.querySelectorAll('td.slot').forEach(cell => {
+            cell.addEventListener('dragover', ev => {
+                if(dragState) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; }
+            });
+            cell.addEventListener('drop', ev => {
+                ev.preventDefault();
+                if(!dragState) return;
+                const target = {
+                    datum: cell.dataset.datum,
+                    dienst: cell.dataset.dienst
+                };
+                // Skip if same cell
+                if(dragState.datum === target.datum && dragState.dienst === target.dienst) return;
+                fetch('/api/rooster/move', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({source: {datum: dragState.datum, dienst: dragState.dienst}, target})
+                }).then(r=>r.json()).then(resp => {
+                    if(resp.status === 'ok') {
+                        // Re-render only affected cells (simple refresh for now)
+                        updateMatrixFromData(resp.rooster);
+                    } else {
+                        M.toast({html: resp.message || 'Fout bij verplaatsen'});
+                    }
+                }).catch(() => M.toast({html: 'Netwerkfout'}));
+            });
+        });
+    }
+    function updateMatrixFromData(rooster){
+        // Map: datum -> dienst -> naam
+        const map = {};
+        rooster.forEach(d => { map[d.datum] = d; });
+        document.querySelectorAll('td.slot').forEach(td => {
+            const datum = td.dataset.datum; const dienst = td.dataset.dienst; const medewerker = td.dataset.medewerker;
+            const dag = map[datum];
+            if(!dag) return;
+            const assignedName = dag[dienst];
+            const isAssigned = assignedName === medewerker;
+            td.classList.toggle('assigned', isAssigned);
+            const chip = td.querySelector('.drag-chip');
+            if(isAssigned){
+                if(!chip){
+                    const div = document.createElement('div');
+                    div.className = 'chip drag-chip';
+                    // dienst letter
+                    div.textContent = dienst[0];
+                    div.draggable = true;
+                    div.setAttribute('data-naam', medewerker);
+                    td.innerHTML = ''; td.appendChild(div);
+                }
+            } else {
+                if(chip){ td.innerHTML='&nbsp;'; }
+            }
+        });
+        initDrag();
+        updateMatrixSummary();
+    }
     function applyMatrixFilters(){
         const vanaf = document.getElementById('filterVanaf').value;
         const tot = document.getElementById('filterTot').value;
@@ -184,7 +259,8 @@
             const el = document.getElementById(id); if(el) el.addEventListener('input', applyMatrixFilters);
         });
         M.FormSelect.init(document.querySelectorAll('select'));
-        applyMatrixFilters();
+    applyMatrixFilters();
+    initDrag();
     });
 </script>
 {% endblock %}
