@@ -166,10 +166,10 @@ def login_required(fn):
 # Startpagina
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    if not session.get('user'):
+        # Altijd eerst naar login vóór toegang tot startpagina
+        return redirect(url_for('login', next=request.path))
     if request.method == 'POST':
-        if not session.get('user'):
-            flash('Eerst inloggen om rooster te genereren.', 'error')
-            return redirect(url_for('login'))
         start_datum = datetime.today()
         medewerkers = laad_medewerkers()
         rooster = genereer_rooster(start_datum, medewerkers, DIENSTEN, fair=True)
