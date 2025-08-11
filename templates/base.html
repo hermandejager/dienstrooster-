@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{% block title %}Dienstrooster{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet" />
+    <style>
+        body { background:#f5f7fa; transition:background .3s, color .3s; }
+        body.dark { background:#121212; color:#eee; }
+        body.dark .card, body.dark .stat-card, body.dark .summary-bar { background:#1e1e1e; border-color:#333; }
+        body.dark nav.white { background:#1c1c1c !important; border-bottom-color:#333; }
+        body.dark table.striped > tbody > tr:nth-child(odd) { background:#1a1d20; }
+        body.dark footer.page-footer { background:#0d0d0d; }
+        .flash-container { position:fixed; top:70px; right:20px; z-index:999; max-width:320px; }
+        .flash { padding:.75rem 1rem; margin-bottom:.6rem; border-radius:6px; font-size:.85rem; box-shadow:0 2px 4px rgba(0,0,0,.15); display:flex; align-items:center; gap:.6rem; }
+        .flash.success { background:#e8f5e9; color:#2e7d32; }
+        .flash.error { background:#ffebee; color:#c62828; }
+        .flash.warning { background:#fff8e1; color:#ef6c00; }
+        .flash.info { background:#e3f2fd; color:#1565c0; }
+        body.dark .flash.success { background:#1b3b1d; color:#81c784; }
+        body.dark .flash.error { background:#3d1515; color:#ef9a9a; }
+        body.dark .flash.warning { background:#4a3d17; color:#ffcc80; }
+        body.dark .flash.info { background:#12324d; color:#90caf9; }
+        nav { box-shadow: none; border-bottom:1px solid #e0e0e0; }
+        .brand-logo { font-size:1.3rem !important; }
+        main { padding:1.5rem 1.2rem 3rem; }
+        .card-title { font-size:1.15rem !important; }
+        table.striped > tbody > tr:nth-child(odd) { background-color:#f2f6fa; }
+        .chip.dag { background:#e3f2fd; color:#1565c0; }
+        .chip.avond { background:#fff3e0; color:#ef6c00; }
+        .chip.nacht { background:#263238; color:#eceff1; }
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; }
+        .stat-card { padding:0.75rem 1rem; border-radius:8px; background:#fff; border:1px solid #e0e0e0; }
+        .stat-card h6 { margin:0 0 .25rem; font-weight:600; }
+        footer.page-footer { padding-top:0; background:#263238; }
+        .filter-row .input-field { margin-top:0; }
+        .table-container { max-height:65vh; overflow:auto; }
+        .month-row { background:#eceff1 !important; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; }
+        .floating-action-btn { position:fixed; right:2rem; bottom:2rem; }
+        .summary-bar { font-size:.8rem; padding:.6rem 1rem; background:#fafafa; border:1px solid #e0e0e0; border-radius:6px; margin-top:1rem; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{% if session.get('dark') %}dark{% endif %}">
+    <nav class="white">
+        <div class="nav-wrapper container">
+            <a href="{{ url_for('index') }}" class="brand-logo black-text">Dienstrooster</a>
+            <ul id="nav-mobile" class="right hide-on-med-and-down">
+                <li><a href="{{ url_for('index') }}" class="black-text">Home</a></li>
+                <li><a href="{{ url_for('rooster') }}" class="black-text">Rooster</a></li>
+                <li><a href="{{ url_for('medewerkers') }}" class="black-text">Medewerkers</a></li>
+                {% if session.get('user') %}
+                <li><a href="{{ url_for('logout') }}" class="black-text">Logout ({{ session.get('user') }})</a></li>
+                {% else %}
+                <li><a href="{{ url_for('login') }}" class="black-text">Login</a></li>
+                {% endif %}
+                <li><a href="#" id="darkToggle" class="black-text" title="Dark mode">🌓</a></li>
+            </ul>
+        </div>
+    </nav>
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">
+                <span>{{ message }}</span>
+                <a href="#" onclick="this.parentElement.remove();return false;" style="margin-left:auto;">&times;</a>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </div>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <div class="fixed-action-btn">
+        <a class="btn-floating btn-large blue tooltipped" data-position="left" data-tooltip="Export JSON" href="{{ url_for('export_rooster_json') }}" target="_blank">
+            <i class="material-icons">file_download</i>
+        </a>
+    </div>
+    <footer class="page-footer">
+        <div class="footer-copyright">
+            <div class="container grey-text text-lighten-2">Prototype • Material Design UI</div>
+        </div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded',()=>{M.AutoInit();});
+      const toggle=document.getElementById('darkToggle');
+      if(toggle){
+  toggle.addEventListener('click',e=>{e.preventDefault();fetch("{{ url_for('toggle_dark') }}").then(()=>location.reload());});
+      }
+      // auto-dismiss flashes
+      setTimeout(()=>{document.querySelectorAll('.flash').forEach(f=>{f.style.opacity='0'; setTimeout(()=>f.remove(),400);});},5000);
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

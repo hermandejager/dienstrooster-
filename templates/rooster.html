@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% block title %}Rooster • Dienstrooster{% endblock %}
+{% block content %}
+<style>
+    .matrix-scroll {overflow-x:auto; border:1px solid #e0e0e0; border-radius:6px;}
+    table.rooster-matrix {border-collapse:separate; border-spacing:0; font-size:12px;}
+    table.rooster-matrix th, table.rooster-matrix td {border:1px solid #eee; padding:2px 4px; white-space:nowrap;}
+    table.rooster-matrix th.sticky-col, table.rooster-matrix td.sticky-col {position:sticky; left:0; background:#fafafa; z-index:3;}
+    table.rooster-matrix th.top-date {text-align:center; font-size:11px; background:#f5f5f5;}
+    table.rooster-matrix th.dienst-kop {font-weight:500; font-size:10px; background:#fafafa;}
+    td.slot.assigned {font-weight:600;}
+    td.slot .chip {margin:0; height:20px; line-height:20px; font-size:10px;}
+    .legend {display:flex; gap:16px; flex-wrap:wrap; font-size:12px; margin-bottom:8px;}
+    .legend span {display:inline-flex; align-items:center; gap:4px;}
+    .legend .chip {height:18px; line-height:18px; font-size:10px;}
+    .toolbar-mini {display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
+    .toolbar-mini input {max-width:130px;}
+    .summary-bar {font-size:12px; margin-top:8px;}
+</style>
+<div class="row">
+ <div class="col s12">
+    {% if rooster %}
+    {% set medewerkers_map = {} %}
+    {% for dag in rooster %}
+        {% for dienst in diensten %}
+            {% set naam = dag[dienst] %}
+            {% if naam and naam != '-' %}
+                {% if not medewerkers_map.get(naam) %}
+                    {% set _ = medewerkers_map.update({naam:1}) %}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+    {% set medewerkers = medewerkers_map.keys()|list|sort %}
+    <div class="card">
+        <div class="card-content">
+            <span class="card-title">Rooster (Matrix: Medewerkers verticaal, Dagen horizontaal)</span>
+            <div class="toolbar-mini">
+                <div class="input-field" style="margin:0;">
+                    <input type="date" id="filterVanaf" />
+                    <label class="active" for="filterVanaf">Vanaf</label>
+                </div>
+                <div class="input-field" style="margin:0;">
+                    <input type="date" id="filterTot" />
+                    <label class="active" for="filterTot">Tot</label>
+                </div>
+                <div class="input-field" style="margin:0;">
+                    <select id="filterDienst">
+                        <option value="">(alle diensten)</option>
+                        {% for d in diensten %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    </select>
+                    <label>Dienst</label>
+                </div>
+                <div class="input-field" style="margin:0;">
+                    <input id="zoek" type="text" placeholder="Zoek medewerker..." />
+                    <label class="active" for="zoek">Zoek</label>
+                </div>
+                <button class="btn-flat" onclick="resetMatrixFilters()" title="Reset"><i class="material-icons">refresh</i></button>
+            </div>
+            <div class="legend">
+                <span><div class="chip dag">D</div> Dag</span>
+                <span><div class="chip avond">A</div> Avond</span>
+                <span><div class="chip nacht">N</div> Nacht</span>
+            </div>
+            <div class="matrix-scroll">
+                <table class="rooster-matrix" id="matrixTable">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col" rowspan="2">Medewerker</th>
+                            {% for dag in rooster %}
+                                <th class="top-date" colspan="{{ diensten|length }}" data-datum="{{ dag['datum'] }}">{{ dag['datum'] }}</th>
+                            {% endfor %}
+                        </tr>
+                        <tr>
+                            {% for dag in rooster %}
+                                {% for dienst in diensten %}
+                                    <th class="dienst-kop" data-datum="{{ dag['datum'] }}" data-dienst="{{ dienst }}">{{ dienst[0:1] }}</th>
+                                {% endfor %}
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for medewerker in medewerkers %}
+                            <tr data-medewerker-row="{{ medewerker }}">
+                                <th class="sticky-col">{{ medewerker }}</th>
+                                {% for dag in rooster %}
+                                    {% for dienst in diensten %}
+                                        {% set assigned = (dag[dienst] == medewerker) %}
+                                        <td class="slot {% if assigned %}assigned{% endif %}" data-datum="{{ dag['datum'] }}" data-dienst="{{ dienst }}" data-medewerker="{{ medewerker }}">
+                                            {% if assigned %}
+                                                <div class="chip {% if dienst=='Dagdienst' %}dag{% elif dienst=='Avonddienst' %}avond{% else %}nacht{% endif %}">{{ dienst[0:1] }}</div>
+                                            {% else %}&nbsp;{% endif %}
+                                        </td>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="summary-bar" id="summary"></div>
+            <div id="stats" class="stats-grid" style="margin-top:12px;"></div>
+        </div>
+    </div>
+    {% else %}
+        <div class="card"><div class="card-content"><p class="grey-text">Nog geen rooster aanwezig. Genereer een nieuw rooster op de startpagina.</p></div></div>
+    {% endif %}
+ </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    const diensten = JSON.parse('{{ diensten|tojson|safe }}');
+    function applyMatrixFilters(){
+        const vanaf = document.getElementById('filterVanaf').value;
+        const tot = document.getElementById('filterTot').value;
+        const dienstFilter = document.getElementById('filterDienst').value;
+        const zoek = document.getElementById('zoek').value.toLowerCase();
+        // Kolommen tonen/verbergen obv datum & dienst
+        const headerDates = document.querySelectorAll('th.top-date');
+        const dienstHeaders = document.querySelectorAll('th.dienst-kop');
+        const activeDateSet = new Set();
+        headerDates.forEach(th => {
+            const d = th.dataset.datum;
+            let show = true;
+            if(vanaf && d < vanaf) show = false;
+            if(tot && d > tot) show = false;
+            th.style.display = show ? '' : 'none';
+            // bij verbergen ook onderliggende dienst kolommen verbergen
+            const span = diensten.length;
+            // markeer welke datums actief blijven
+            if(show) activeDateSet.add(d);
+        });
+        dienstHeaders.forEach(th => {
+            const d = th.dataset.datum;
+            let colShow = activeDateSet.has(d);
+            if(colShow && dienstFilter && th.dataset.dienst !== dienstFilter) colShow = false;
+            th.style.display = colShow ? '' : 'none';
+        });
+        // Body cellen
+        document.querySelectorAll('#matrixTable tbody tr').forEach(tr => {
+            const naam = tr.getAttribute('data-medewerker-row').toLowerCase();
+            let rowVisible = true;
+            if(zoek && !naam.includes(zoek)) rowVisible = false;
+            tr.style.display = rowVisible ? '' : 'none';
+            if(rowVisible){
+                tr.querySelectorAll('td.slot').forEach(td => {
+                    const d = td.dataset.datum; const dj = td.dataset.dienst;
+                    let cellShow = activeDateSet.has(d);
+                    if(cellShow && dienstFilter && dj !== dienstFilter) cellShow = false;
+                    td.style.display = cellShow ? '' : 'none';
+                });
+            }
+        });
+        updateMatrixSummary();
+    }
+    function resetMatrixFilters(){
+        ['filterVanaf','filterTot','zoek'].forEach(id => document.getElementById(id).value='');
+        document.getElementById('filterDienst').value='';
+        M.FormSelect.init(document.getElementById('filterDienst'));
+        applyMatrixFilters();
+    }
+    function updateMatrixSummary(){
+        const visibleDates = new Set();
+        document.querySelectorAll('th.dienst-kop').forEach(th => { if(th.style.display !== 'none') visibleDates.add(th.dataset.datum); });
+        const dienstCount = {}; const medewerkerCount = {};
+        document.querySelectorAll('td.slot.assigned').forEach(td => {
+            if(td.style.display === 'none') return;
+            const d = td.dataset.dienst; const m = td.dataset.medewerker;
+            dienstCount[d] = (dienstCount[d]||0)+1;
+            medewerkerCount[m] = (medewerkerCount[m]||0)+1;
+        });
+        const summary = document.getElementById('summary');
+        summary.innerHTML = 'Zichtbare datums: '+[...visibleDates].length + ' • ' + diensten.map(d=> d+': '+(dienstCount[d]||0)).join(' | ');
+        renderMatrixStats(medewerkerCount);
+    }
+    function renderMatrixStats(medewerkerCount){
+        const stats = document.getElementById('stats');
+        const total = Object.values(medewerkerCount).reduce((a,b)=>a+b,0)||1;
+        stats.innerHTML = Object.entries(medewerkerCount).sort((a,b)=>b[1]-a[1]).map(([m,c])=>`<div class='stat'><h3>${m}</h3><p>${c} diensten<br><span style='color:var(--clr-accent);font-weight:600;'>${(c/total*100).toFixed(1)}%</span></p></div>`).join('');
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        ['filterVanaf','filterTot','filterDienst','zoek'].forEach(id => {
+            const el = document.getElementById(id); if(el) el.addEventListener('input', applyMatrixFilters);
+        });
+        M.FormSelect.init(document.querySelectorAll('select'));
+        applyMatrixFilters();
+    });
+</script>
+{% endblock %}

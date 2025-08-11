@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Bewerk {{ medewerker.naam }} • Dienstrooster{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col s12 m10 l8">
+    <div class="card">
+      <div class="card-content">
+        <span class="card-title">Bewerk {{ medewerker.naam }}</span>
+        <form method="post" class="row">
+          <div class="input-field col s12">
+            <p>Voorkeur diensten:</p>
+            {% for d in diensten %}
+            <label style="margin-right:1rem;">
+              <input type="checkbox" name="voorkeur_diensten" value="{{ d }}" {% if d in medewerker.voorkeur_diensten %}checked{% endif %}/>
+              <span>{{ d }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="input-field col s12 m6">
+            <input type="number" name="max_nacht" id="max_nacht" value="{{ medewerker.max_nachtdiensten_per_maand }}" min="0" max="20" />
+            <label class="active" for="max_nacht">Max nachtdiensten / maand</label>
+          </div>
+          <div class="input-field col s12 m6">
+            <input type="number" name="max_week" id="max_week" value="{{ medewerker.max_diensten_per_week or 7 }}" min="1" max="21" />
+            <label class="active" for="max_week">Max diensten / week</label>
+          </div>
+          <div class="col s12">
+            <p style="margin-top:0.5rem; font-weight:600;">Beschikbaarheid kalender (klik om te togglen)</p>
+            <div id="calendar" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:.5rem; max-height:300px; overflow:auto; border:1px solid #e0e0e0; padding:.5rem; border-radius:6px;"></div>
+            <input type="hidden" name="beschikbaarheid_raw" id="beschikbaarheid_raw_hidden" />
+            <small class="grey-text">Groen = beschikbaar, Rood = niet beschikbaar. Periode: komende 90 dagen.</small>
+          </div>
+          <div class="col s12" style="margin-top:1rem;">
+            <button class="btn waves-effect waves-light" type="submit"><i class="material-icons left">save</i>Opslaan</button>
+            <a href="{{ url_for('medewerkers') }}" class="btn-flat">Annuleren</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const existing = JSON.parse('{{ medewerker.beschikbaarheid | tojson | safe }}');
+  const cal = document.getElementById('calendar');
+  const hidden = document.getElementById('beschikbaarheid_raw_hidden');
+  const today = new Date();
+  for(let i=0;i<90;i++){
+    const dt = new Date(today.getTime()+ i*86400000);
+    const iso = dt.toISOString().slice(0,10);
+    const div = document.createElement('div');
+    div.dataset.date = iso;
+    div.style.cursor='pointer';
+    div.style.padding='.4rem';
+    div.style.border='1px solid #ccc';
+    div.style.borderRadius='4px';
+    const state = existing[iso] !== undefined ? existing[iso] : true; // default beschikbaar
+    if(state) { div.style.background='#e8f5e9'; div.style.color='#2e7d32'; }
+    else { div.style.background='#ffebee'; div.style.color='#c62828'; }
+    div.innerHTML = `<strong>${iso.slice(5)}</strong><br><span style="font-size:.65rem;">${state?'aanwezig':'niet'}</span>`;
+    div.addEventListener('click',()=>{
+      const now = div.style.background === 'rgb(232, 245, 233)'; // groen?
+      if(now){ // switch naar niet
+        div.style.background='#ffebee'; div.style.color='#c62828';
+        div.querySelector('span').textContent='niet';
+      } else {
+        div.style.background='#e8f5e9'; div.style.color='#2e7d32';
+        div.querySelector('span').textContent='aanwezig';
+      }
+      buildHidden();
+    });
+    cal.appendChild(div);
+  }
+  function buildHidden(){
+    const parts=[];
+    cal.querySelectorAll('div[data-date]').forEach(d=>{
+      const iso=d.dataset.date;
+      const avail = d.style.background === 'rgb(232, 245, 233)';
+      parts.push(`${iso}=${avail?1:0}`);
+    });
+    hidden.value = parts.join(', ');
+  }
+  buildHidden();
+})();
+</script>
+{% endblock %}
